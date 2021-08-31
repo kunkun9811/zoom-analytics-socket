@@ -3,7 +3,7 @@
         - This is the class for socket io connection
 */
 
-/*
+/* TODO: Might need to update the following schema
 -- These are all the "LIVE" rooms currently being used, each room is going to have the following structure
 room = {
   room_1_Id: {
@@ -29,6 +29,7 @@ user = {
 }
 */
 const rooms = {};
+const USERS = {};
 
 const defaultUser = {
   id: "anon",
@@ -42,26 +43,69 @@ class Connection {
     this.socket = socket;
     this.io = io;
 
-    socket.on("sendMessage", (message) => this.sendMessage(message));
+    socket.on("join_room", (roomNumber) => this.handleJoinRoom(roomNumber)); // user join room
+    socket.on("send_confused_state", (newConfusionState) => this.handleReceivedConfusedState(newConfusionState)); // user send confusion state (for aggregate analytics for instructors)
 
-    //     socket.on("disconnect", (roomId) => this.disconnect(roomId));
+    socket.on("disconnecting", () => this.handleUserLeaving()); // clean up before user leaves
+    socket.on("disconnect", () => this.disconnect()); // DEBUG: for now log updated "rooms" object
     socket.on("connect_error", (err) => {
+      // error handling
       console.log(`connect_error due to ${err.message}`);
     });
+
+    // TODO: send aggregate data every 2.5 seconds - I could probably just use setInterval();
   }
 
-  sendMessage(message) {
-    console.log(message);
-    console.log(`User ${this.socket.id} joined room number ${message.roomNumber}`);
-    //     socket.emit("client-receive-message", message);
+  // add user to corresponding room and create user object + join SOCKET IO's own join implementation
+  handleJoinRoom(roomNumber) {
+    console.log(`User ${this.socket.id} JOIN room number: ${roomNumber}`);
+    const newUser = {
+      roomNumber: roomNumber,
+      confusionState: "NEUTRAL",
+    };
+
+    // KEY: add user to users object
+    USERS[this.socket.id] = newUser;
+
+    // KEY: add user to sets of users in the corresponding room
+    if (rooms.hasOwnProperty(roomNumber)) {
+      rooms[roomNumber].add(this.socket.id);
+    } else {
+      rooms[roomNumber] = new Set();
+      rooms[roomNumber].add(this.socket.id);
+    }
+
+    // KEY: instruct SOCKET IO to add user to a room according to their implementation
+    this.socket.join(roomNumber);
+
+    // DEBUG: to be deleted
+    console.log("=====================rooms=====================");
+    console.log(rooms);
+    console.log("=====================rooms[roomNumber]=====================");
+    console.log(rooms[roomNumber]);
+    console.log("===================USERS===================");
+    console.log(USERS);
   }
 
-  // TODO: might need to see if this work
-  //   disconnect(roomId) {
-  //     console.log("=====================this.socket=====================");
-  //     console.log(this.socket);
-  //     delete rooms[roomId][this.socket];
-  //   }
+  // udpate confusion state of the corresponding user
+  handleReceivedConfusedState(newConfusionState) {
+    USERS[this.socket.id].confusionState = newConfusionState;
+    console.log(`====================updated ${this.socket.id} data====================`);
+    console.log(USERS[this.socket.id]);
+  }
+
+  // remove user from the corresponding room in "rooms" object
+  handleUserLeaving() {
+    console.log(`==========================User ${this.socket.id} Leaving==========================`);
+    const currentUser = USERS[`${this.socket.id}`];
+    rooms[currentUser.roomNumber].delete(this.socket.id);
+  }
+
+  // DEBUG: show the rooms after removing user from room in "handleUserLeaving()"
+  disconnect() {
+    console.log("========================DISCONNECTED========================");
+    console.log(rooms);
+  }
 }
 
 function chat(io) {

@@ -1,41 +1,61 @@
+/* TODO BOARD */
+/*
+  - fix the schema
+  - remove room functionality (when all instructor leaves room or see if we can actually check if the meeting has ended)
+
+*/
+
+SEND_ANALYTICS_INTERVAL = 10000;
+
 /* analytics.js */
 /*
         - This is the class for socket io connection
 */
 
-/* TODO: Might need to update the following schema
+/* 
 -- These are all the "LIVE" rooms currently being used, each room is going to have the following structure
+NOTE: students are SETS of student id's (or more precisely their connected socket id)
+
+// TODO: actually... might not need confusionPercentage
 room = {
   room_1_Id: {
-    user_1_Id: user_1_Obj,
-    user_2_Id: user_2_Obj,
-    user_3_Id: user_3_Obj,
+    confusionPercentage: [percentage from 0 ~ 100]
+    students: Set(
+      student_1_id,
+      student_2_id,
+      ...
+    )
   },
   room_2_Id: {
-    user_4_Id: user_4_Obj,
-    user_5_Id: user_5_Obj,
-    user_6_Id: user_6_Obj,
+    confusionPercentage: [percentage from 0 ~ 100]
+    students: Set(
+      student_3_id,
+      student_4_id,
+      ...
+    )
   },
+  
 }
         - roomId => zoom room id used to join in the frontend
-        - user1, user2, ... => these are objects of the "user" structure mention below
 
--- Each user is going to have the following structure
+-- USERS is going to have the following structure
+NOTE: USERS is a MAP
+
+USERS = Map{
+  "user_1_id": {
+    roomNumber: 12345,
+    confusionState: "CONFUSED", // NOTE: this will be "CONFUSED", "NEUTRAL", "ERROR", or "N/A"
+  }
+}
+
 user = {
   id: 1234567890,
-  name: "Timo",
   confusionState: "confused",
   [... in the future we could have more analytics here]
 }
 */
 const rooms = {};
 const USERS = {};
-
-const defaultUser = {
-  id: "anon",
-  name: "Anonymous",
-  confusionState: "none",
-};
 
 // connection class
 class Connection {
@@ -53,15 +73,25 @@ class Connection {
       console.log(`connect_error due to ${err.message}`);
     });
 
-    // TODO: send aggregate data every 2.5 seconds - I could probably just use setInterval();
+    // send aggregate data every SEND_ANALYTICS_INTERVAL seconds for each room
+    setInterval(() => {
+      console.log("SENDING AGGREGATE DATA");
+      for (let room in rooms) {
+        console.log(room);
+        const confusionPercentage = this.calculateCurrentRoomConfusedPercentage(room);
+        // socket.to(room).emit("send_aggregate_analytics", confusionPercentage);
+        io.in(room).emit("send_aggregate_analytics", confusionPercentage);
+      }
+    }, SEND_ANALYTICS_INTERVAL);
   }
 
   // add user to corresponding room and create user object + join SOCKET IO's own join implementation
   handleJoinRoom(roomNumber) {
     console.log(`User ${this.socket.id} JOIN room number: ${roomNumber}`);
+    // create new user
     const newUser = {
       roomNumber: roomNumber,
-      confusionState: "NEUTRAL",
+      confusionState: "Neutral",
     };
 
     // KEY: add user to users object
@@ -69,41 +99,78 @@ class Connection {
 
     // KEY: add user to sets of users in the corresponding room
     if (rooms.hasOwnProperty(roomNumber)) {
-      rooms[roomNumber].add(this.socket.id);
+      rooms[roomNumber].students.add(this.socket.id);
     } else {
-      rooms[roomNumber] = new Set();
-      rooms[roomNumber].add(this.socket.id);
+      // create new room
+      const newSet = new Set();
+      rooms[roomNumber] = {
+        confusionPercentage: 0,
+        students: newSet,
+      };
+      rooms[roomNumber].students.add(this.socket.id);
     }
 
     // KEY: instruct SOCKET IO to add user to a room according to their implementation
     this.socket.join(roomNumber);
 
     // DEBUG: to be deleted
-    console.log("=====================rooms=====================");
-    console.log(rooms);
-    console.log("=====================rooms[roomNumber]=====================");
-    console.log(rooms[roomNumber]);
-    console.log("===================USERS===================");
-    console.log(USERS);
+    // console.log("============room============");
+    // console.log(roomNumber);
+    // console.log("=====================rooms=====================");
+    // console.log(rooms);
+    // console.log("=====================rooms[roomNumber]=====================");
+    // console.log(rooms[roomNumber]);
+    // console.log("===================USERS===================");
+    // console.log(USERS);
   }
 
   // udpate confusion state of the corresponding user
   handleReceivedConfusedState(newConfusionState) {
-    USERS[this.socket.id].confusionState = newConfusionState;
-    console.log(`====================updated ${this.socket.id} data====================`);
-    console.log(USERS[this.socket.id]);
+    if (USERS[this.socket.id]) {
+      USERS[this.socket.id].confusionState = newConfusionState;
+      // console.log(`====================updated ${this.socket.id} data====================`);
+      // console.log(USERS[this.socket.id]);
+    }
+  }
+
+  // calculate current "room's" overall confusion percentage
+  calculateCurrentRoomConfusedPercentage(room) {
+    const studentSet = rooms[room].students;
+    const totalStudents = studentSet.size;
+    let numberOfConfused = 0;
+
+    console.log("=================ROOMS=================");
+    console.log(rooms);
+    console.log("=================USERS=================");
+    console.log(USERS);
+    console.log("================student set================");
+    console.log(studentSet);
+
+    // for (let studentId in studentSet) {
+    //   console.log(`__________________student ${studentId} confused state__________________`);
+    //   console.log(USERS[studentId].confusionState);
+    //   if (USERS[studentId].confusionState === "Confused") numberOfConfused++;
+    // }
+
+    studentSet.forEach((studentId) => {
+      console.log(`__________________student ${studentId} confused state__________________`);
+      console.log(USERS[studentId].confusionState);
+      if (USERS[studentId].confusionState === "Confused") numberOfConfused++;
+    });
+
+    return numberOfConfused / totalStudents;
   }
 
   // remove user from the corresponding room in "rooms" object
   handleUserLeaving() {
     console.log(`==========================User ${this.socket.id} Leaving==========================`);
     const currentUser = USERS[`${this.socket.id}`];
-    rooms[currentUser.roomNumber].delete(this.socket.id);
+    rooms[currentUser.roomNumber].students.delete(this.socket.id);
   }
 
   // DEBUG: show the rooms after removing user from room in "handleUserLeaving()"
   disconnect() {
-    console.log("========================DISCONNECTED========================");
+    // console.log("========================DISCONNECTED========================");
     console.log(rooms);
   }
 }

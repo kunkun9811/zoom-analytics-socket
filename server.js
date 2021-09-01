@@ -4,8 +4,6 @@ const http = require("http");
 const server = http.createServer(app);
 const { Server } = require("socket.io");
 
-const CORS_ORIGIN = "https://zoomdemo.aankh.co";
-
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -13,17 +11,6 @@ const io = new Server(server, {
 });
 const chat = require("./analytics");
 const port = 3000;
-
-var whitelist = ["http://localhost:4001", "http://www.zoomdemo.aankh.co/overlay", "https://www.zoomdemo.aankh.co/overlay", "http://www.zoomdemo.aankh.co", "https://www.zoomdemo.aankh.co/overlay"];
-var corsOptions = {
-  origin: function (origin, callback) {
-    if (whitelist.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-};
 
 app.options("*", cors(corsOptions)); // include before other routes
 

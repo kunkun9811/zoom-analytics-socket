@@ -12,8 +12,6 @@ const io = new Server(server, {
 const chat = require("./analytics");
 const port = 3000;
 
-app.options("*", cors(corsOptions)); // include before other routes
-
 app.get("/", (req, res) => {
   res.send("<h1>Socket server :)</h1>");
 });

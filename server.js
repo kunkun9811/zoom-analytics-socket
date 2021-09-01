@@ -3,13 +3,16 @@ const app = express();
 const http = require("http");
 const server = http.createServer(app);
 const { Server } = require("socket.io");
+
+const CORS_ORIGIN = "https://zoomdemo.aankh.co";
+
 const io = new Server(server, {
-  cors: {
-    origin: ["http://localhost:3001"],
-  },
+	cors: {
+		origin: "*",
+	},
 });
 const chat = require("./analytics");
-const port = 4001;
+const port = 3000;
 
 app.get("/", (req, res) => {
   res.send("<h1>Socket server :)</h1>");

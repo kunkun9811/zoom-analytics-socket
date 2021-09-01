@@ -3,11 +3,16 @@ const app = express();
 const http = require("http");
 const server = http.createServer(app);
 const { Server } = require("socket.io");
-const io = new Server(server);
-const cors = require("cors");
 
+const CORS_ORIGIN = "https://zoomdemo.aankh.co";
+
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
 const chat = require("./analytics");
-const port = 4001;
+const port = 3000;
 
 var whitelist = ["http://localhost:4001", "http://www.zoomdemo.aankh.co/overlay", "https://www.zoomdemo.aankh.co/overlay", "http://www.zoomdemo.aankh.co", "https://www.zoomdemo.aankh.co/overlay"];
 var corsOptions = {
